@@ -1,0 +1,202 @@
+/* CrimeSketchAI: spectrum workspace. Presentation only; native controls stay accessible. */
+:root {
+  --cs-bg: #080d1b;
+  --cs-panel: #10192c;
+  --cs-border: rgba(170,188,235,.15);
+  --cs-muted: #aab7d2;
+  --cs-cyan: #67e8f9;
+  --cs-violet: #a78bfa;
+}
+.stApp {
+  color: #e8eeff;
+  color-scheme: dark;
+  background-color: #070d1c;
+  background-image:
+    radial-gradient(ellipse 68% 52% at 94% -4%, rgba(124,58,237,.34), transparent 73%),
+    radial-gradient(ellipse 48% 42% at 3% 8%, rgba(6,182,212,.22), transparent 74%),
+    radial-gradient(ellipse 54% 60% at 94% 91%, rgba(37,99,235,.18), transparent 76%),
+    radial-gradient(ellipse 38% 48% at 11% 91%, rgba(20,184,166,.09), transparent 78%),
+    linear-gradient(118deg, transparent 29%, rgba(99,102,241,.065) 46%, transparent 65%),
+    linear-gradient(rgba(148,163,220,.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,220,.026) 1px, transparent 1px),
+    linear-gradient(155deg, #0a1429 0%, #0b1023 44%, #080e1e 100%);
+  background-size: auto, auto, auto, auto, auto, 52px 52px, 52px 52px, auto;
+  background-attachment: fixed;
+}
+/* Keep the main workspace transparent so the gradient is visible in wide layouts. */
+[data-testid="stAppViewContainer"], [data-testid="stMain"] {
+  background-color: transparent;
+}
+[data-testid="stHeader"] { background: rgba(8,13,27,.87); backdrop-filter: blur(16px); }
+[data-testid="stMainBlockContainer"] {
+  max-width: 1500px;
+  padding-top: 2.25rem;
+  padding-bottom: 3rem;
+}
+[data-testid="stSidebar"] {
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(99,102,241,.14), transparent 53%),
+    linear-gradient(165deg, #131831 0%, #0b1425 60%, #0b1826 100%);
+  border-right: 1px solid var(--cs-border);
+}
+[data-testid="stSidebar"] h2 { font-size: 1.08rem; letter-spacing: .015em; }
+[data-testid="stSidebar"] h3 { font-size: 1rem; }
+h1, h2, h3 { color: #eef3ff; }
+h1 {
+  font-size: clamp(2.35rem, 3.4vw, 3.5rem) !important;
+  letter-spacing: -.055em;
+  font-weight: 800 !important;
+  line-height: 1.12 !important;
+  padding-top: .15rem !important;
+}
+[data-testid="stMain"] h1 {
+  background: linear-gradient(100deg, #f2f6ff 0%, #c4b5fd 42%, #67e8f9 82%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
+}
+h2 { letter-spacing: -.025em; font-weight: 650 !important; }
+h3 { letter-spacing: -.015em; }
+.cs-eyebrow {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .21em;
+  color: #8fe8f2;
+  margin: .15rem 0 .45rem;
+}
+.cs-spectrum {
+  width: 92px;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg,#8b5cf6,#38bdf8,#22d3ee);
+  margin-bottom: .9rem;
+}
+[data-testid="stCaptionContainer"] { color: var(--cs-muted); }
+[data-testid="stWidgetLabel"] p { font-weight: 550; color: #d5def2; }
+[data-testid="stTextArea"] textarea,
+[data-testid="stTextInput"] input {
+  color: #eef3ff;
+  caret-color: var(--cs-cyan);
+}
+[data-testid="stTextArea"] [data-baseweb="textarea"],
+[data-testid="stTextInput"] [data-baseweb="input"],
+[data-baseweb="select"] > div {
+  background-color: #111b30;
+  border-color: var(--cs-border);
+  border-radius: 10px;
+}
+[data-testid="stTextArea"] textarea { line-height: 1.65; }
+textarea::placeholder, input::placeholder { color: #8292b1 !important; opacity: 1; }
+[data-testid="stTextArea"] [data-baseweb="textarea"]:focus-within,
+[data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(129,140,248,.13);
+}
+.stButton button, .stDownloadButton button,
+[data-testid="stFormSubmitButton"] button {
+  border-radius: 10px;
+  border: 1px solid rgba(169,188,235,.22);
+  background-color: #14203a;
+  color: #e5edff;
+  font-weight: 600;
+  min-height: 2.65rem;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+.stButton button:hover, .stDownloadButton button:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+  border-color: #818cf8;
+  color: #fff;
+  background-color: #1c2947;
+}
+button[kind="primary"], [data-testid="stBaseButton-primary"] {
+  background: linear-gradient(110deg,#6d28d9 0%,#4f46e5 52%,#1d4ed8 100%) !important;
+  border: 1px solid rgba(196,181,253,.38) !important;
+  color: #fff !important;
+  box-shadow: 0 5px 22px rgba(79,70,229,.20);
+}
+button[kind="primary"]:hover:not(:disabled),
+[data-testid="stBaseButton-primary"]:hover:not(:disabled) {
+  box-shadow: 0 5px 28px rgba(99,102,241,.35);
+  border-color: #c4b5fd !important;
+}
+[class*="st-key-brief_action_"] button {
+  background: rgba(6,182,212,.09);
+  border-color: rgba(103,232,249,.4);
+  color: #a5f3fc;
+}
+button:disabled { opacity: .43; box-shadow: none !important; }
+button:focus-visible, a:focus-visible {
+  outline: 2px solid #67e8f9 !important;
+  outline-offset: 3px;
+}
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+  gap: .4rem;
+  border-bottom: 1px solid var(--cs-border);
+  padding-bottom: .35rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+  border-radius: 8px 8px 0 0;
+  color: #aab7d2;
+  padding: .65rem .85rem;
+  white-space: nowrap;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+  color: #a5f3fc;
+  background: linear-gradient(180deg,rgba(99,102,241,.13),rgba(34,211,238,.07));
+}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+  background: linear-gradient(90deg,#8b5cf6,#22d3ee);
+  height: 3px;
+}
+[data-testid="stExpander"] {
+  border-color: var(--cs-border);
+  border-radius: 11px;
+  background: rgba(15,24,44,.48);
+}
+[data-testid="stExpander"] summary { color: #c7d3ed; }
+[data-testid="stForm"] { border-color: var(--cs-border); border-radius: 12px; }
+[data-testid="stAlert"] {
+  border-radius: 10px;
+  border: 1px solid rgba(170,188,235,.10);
+}
+[data-testid="stCode"], [data-testid="stJson"] {
+  border-radius: 10px;
+  border: 1px solid var(--cs-border);
+}
+[data-testid="stImage"] img {
+  border-radius: 12px;
+  box-shadow: 0 15px 45px rgba(0,0,0,.18);
+}
+[data-testid="stMetricValue"] { color: #fde68a; font-variant-numeric: tabular-nums; }
+[data-testid="stMetricLabel"] { color: #b8c6e0; }
+hr { border-color: var(--cs-border); }
+a { color: #80d9fc; }
+@media (max-width: 760px) {
+  [data-testid="stMainBlockContainer"] { padding: 1.2rem 1rem 2rem; }
+  h1 { font-size: 2.3rem !important; }
+  [data-testid="stTabs"] [data-baseweb="tab"] { padding: .55rem .65rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+@media (max-width: 760px) {
+  .stApp {
+    background-attachment: scroll;
+    background-size: auto, auto, auto, auto, auto, 40px 40px, 40px 40px, auto;
+  }
+}
+@media (prefers-contrast: more) {
+  .stApp { background-image: none; background-color: #080d1b; }
+}
+
+/* Professional workspace layout refinements. */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:.8rem; }
+[data-testid="stSidebar"] [data-testid="stExpander"] { background:rgba(15,24,44,.28); }
+[data-testid="stMain"] > div { min-width:0; }
+[data-testid="stTabs"] [data-testid="stTabs"] [data-baseweb="tab"] { font-size:.85rem; }
+[data-testid="stImage"] { max-width:100%; }
+[data-testid="stToggle"] { padding-top:.55rem; }
