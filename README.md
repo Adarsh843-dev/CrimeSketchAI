@@ -18,3 +18,6 @@ Public visitors cannot claim the first owner through the UI. Guest session direc
 All users share the hosted HF token's provider quota. Deployment does not reset quota. No automatic paid fallback. The app can still create briefs while image quota is unavailable.
 
 Never commit .env, .streamlit/secrets.toml, local databases, user data, or credentials. No credentials or case data are included in this package.
+
+## Paid reference generation update
+Face sketch supports optional cropped feature references using the separate Generate with references paid action (fal FLUX Kontext multi, experimental). Get Image remains text-only; Hugging Face demo stays the default and its quotas apply. A funded fal account and explicit request authorization are required. Guest users supply their own private fal key; only a signed-in admin can use configured FAL_KEY. Uploads and Get Brief do not submit paid generations. Reference output is illustrative and cannot verify identity. See REFERENCE_GENERATION_GUIDE.txt. This integration was mock-tested; no live paid request was performed.

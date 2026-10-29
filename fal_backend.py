@@ -82,8 +82,8 @@ def write_job(path, job):
         if temp.exists():
             temp.unlink()
 
-def job_path(data_dir, case_id, prompt, seed):
-    digest = sha256(json.dumps([case_id, MODEL, prompt, int(seed)], ensure_ascii=False).encode()).hexdigest()
+def job_path(data_dir, case_id, prompt, seed, model=MODEL):
+    digest = sha256(json.dumps([case_id, model, prompt, int(seed)], ensure_ascii=False).encode()).hexdigest()
     folder = Path(data_dir) / "generation_jobs"
     folder.mkdir(parents=True, exist_ok=True)
     return folder / (digest + ".json")
@@ -101,25 +101,27 @@ def list_pending(data_dir, case_id):
     return result
 
 def run_fal(prompt, seed, key, data_dir, case_id, *, context=None, max_wait=240,
-            transport=None, downloader=None, clock=None, sleep=None):
+            transport=None, downloader=None, clock=None, sleep=None, model=MODEL, payload=None):
     if not key or not key.strip():
         raise ProviderError("A fal API key and funded account are required.")
     transport = transport or request_json
     downloader = downloader or download_image
     clock = clock or time.monotonic
     sleep = sleep or time.sleep
-    path = job_path(data_dir, case_id, prompt, seed)
+    if model not in (MODEL, "fal-ai/flux-pro/kontext/multi"):
+        raise ProviderError("Unsupported generation model.")
+    path = job_path(data_dir, case_id, prompt, seed, model)
     job = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     if job and job.get("state") in ("submitting", "unknown"):
         raise PendingJob("The previous submission has an uncertain outcome. Check your fal request history before starting another request.")
     if job and job.get("state") == "rejected":
         job = None
     if not job:
-        job = {"case_id": case_id, "prompt": prompt, "seed": int(seed),  "model": MODEL, "state": "submitting", "context": context or {}}
+        job = {"case_id": case_id, "prompt": prompt, "seed": int(seed),  "model": model, "state": "submitting", "context": context or {}}
         # Write before sending. A lost submit response must never trigger a blind duplicate charge.
         write_job(path, job)
         try:
-            response = transport(SUBMIT_URL, key, {
+            response = transport("https://queue.fal.run/" + model, key, payload or {
                 "prompt": prompt, "seed": int(seed),
                 "image_size": {"width": 768, "height": 768},
                 "num_inference_steps": 4, "num_images": 1,

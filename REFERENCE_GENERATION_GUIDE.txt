@@ -1,0 +1,24 @@
+PAID REFERENCE GENERATION UPDATE
+
+LOCAL TEST FIRST
+Stop Streamlit with Ctrl+C. Extract this ZIP and copy ALL contents into your current CRIMESCENEAI folder, beside .venv. Replace program files but preserve .env, .venv and data folders. Run START.cmd, or .\.venv\Scripts\python.exe -m streamlit run app.py. No new dependencies are required.
+
+TEXT ONLY
+Get Image keeps your existing selected text provider. Leave the sidebar on Hugging Face demo for the no-paid-API text route. Hugging Face quotas still apply. No automatic paid fallback.
+
+REFERENCES
+Choose Face sketch > Add reference images. Upload/crop one or more feature references and enter an instruction for EACH, including desired differences. Open Paid reference generation, enter your fal API key privately, authorize paid requests/data transfer, then click Generate with references - paid. A funded account is required for real output. Uploading images, cropping, Get Brief, and entering a key do not submit model requests.
+
+The new model is fal-ai/flux-pro/kontext/multi (experimental). It accepts images and instructions but does not guarantee exact feature matching or identity accuracy. Categorical feature controls are instructions, not hard regional masks. Test with fictional or permission-cleared references.
+
+PRIVACY / STORAGE
+Selected crops and reference instructions are sent to fal only on the paid action. Crops stay in the active app session and are not copied into the local job JSON or case database. Instructions, crop coordinates, content hashes, model and request ID are retained with the revision; exports can contain these. Provider retention is governed by fal. Guest users must enter their own key; only a signed-in admin may use the configured server FAL_KEY. Never upload keys to GitHub.
+
+RECOVERY
+A saved pending reference job appears under Recover provider requests. Supply its fal key and authorize retrieval. Resume checks the accepted request without a new POST. An uncertain submission is blocked from automatic retry: check fal request history. The same seed/prompt/crop bytes reuse the saved job; select another seed only when intending another paid request. New crops or instructions are new inputs and may cause a new charge.
+
+GITHUB
+After local review, upload all extracted program files (especially app.py, fal_backend.py, reference_board.py, reference_backend.py and auth_store.py) to the personal repository root. Keep .streamlit/config.toml. Commit once. No secret changes are necessary if entering the fal key in the UI. An admin can optionally configure FAL_KEY in Streamlit private Secrets. Do not commit secrets, .env or data directories.
+
+TEST SCOPE
+Integration tested with mocked provider responses only. No live fal call, purchase or generation charge was made. Real endpoint quality/latency/billing have not been validated with your account.

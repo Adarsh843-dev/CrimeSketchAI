@@ -19,6 +19,8 @@ import streamlit as st
 from gradio_client import Client
 from fal_backend import run_fal, list_pending, ProviderError, PendingJob
 from auth_store import AuthStore, AuthError
+from reference_board import render_reference_board
+from reference_backend import run_reference, prepare_references, REFERENCE_PROVIDER, REFERENCE_MODEL
 from PIL import Image, ImageDraw, ImageOps
 
 st.set_page_config(page_title="CrimeSketchAI", page_icon="🔎", layout="wide")
@@ -588,11 +590,15 @@ def brief_records(case_id):
 
 
 
-def generate_with_provider(prompt, seed, provider, key, case_id, context=None):
+def generate_with_provider(prompt, seed, provider, key, case_id, context=None, references=None):
     if provider == "Hugging Face demo":
         st.session_state["last_provider_request"] = None
         return generate_image(prompt, seed)
-    raw, actual_seed, request_id = run_fal(prompt, seed, key, DATA_DIR, case_id, context=context)
+    if provider == REFERENCE_PROVIDER:
+        raw, actual_seed, request_id = run_reference(prompt, seed, key, DATA_DIR, case_id,
+            references=references, authorized=True, context=context)
+    else:
+        raw, actual_seed, request_id = run_fal(prompt, seed, key, DATA_DIR, case_id, context=context)
     st.session_state["last_provider_request"] = request_id
     with Image.open(BytesIO(raw)) as original:
         picture = ImageOps.grayscale(original).convert("RGB")
@@ -1106,6 +1112,18 @@ if pending_jobs:
     with st.expander("Recover provider requests", expanded=True):
         st.write("Accepted requests can be resumed without a new generation submission.")
         for index, job in enumerate(pending_jobs):
+            if job.get("model") == REFERENCE_MODEL:
+                st.caption("Reference request: " + job.get("request_id", "submission outcome unknown") + " / " + job["state"])
+                resume_key = st.text_input("fal key to resume references",type="password",key="ref_resume_key_"+str(index))
+                if not resume_key and signed_in_user and signed_in_user["role"]=="admin":
+                    resume_key=os.environ.get("FAL_KEY", "")
+                resume_permission=st.checkbox("I authorize retrieval of this existing reference request",key="ref_resume_permission_"+str(index))
+                if job["state"] == "pending" and st.button("Resume reference request " + str(index+1),disabled=not resume_key or not resume_permission,key="ref_resume_"+str(index)):
+                    st.session_state["reference_resume_"+case_id]=(job,resume_key)
+                    st.rerun()
+                elif job["state"] != "pending":
+                    st.warning("Submission outcome is uncertain. Check fal request history before starting another request.")
+                continue
             st.caption("Request: " + job.get("request_id", "submission outcome unknown") + " / " + job["state"])
             if job["state"] != "pending":
                 st.warning("Check fal request history before submitting this input again. The submission outcome is uncertain.")
@@ -1140,6 +1158,24 @@ if pending and pending["case_id"] == case_id:
     st.session_state["parent_" + case_id + "_" + pending["mode"]] = pending["id"]
 
 with create_tab:
+    reference_recovery=st.session_state.pop("reference_resume_"+case_id,None)
+    if reference_recovery:
+        job,recovery_key=reference_recovery
+        try:
+            recovered_png,recovered_seed=generate_with_provider(job["prompt"],job["seed"],REFERENCE_PROVIDER,recovery_key,case_id)
+            context=job.get("context") or {}
+            st.session_state["unsaved_"+case_id]=dict(image=recovered_png,mode="Face sketch",
+                description=context.get("description",job["prompt"]),prompt=job["prompt"],seed=recovered_seed,
+                parent_id=context.get("parent_id"),created=now(),id=uuid.uuid4().hex,provider=REFERENCE_PROVIDER,
+                request_id=st.session_state.get("last_provider_request"),memory_snapshot=context.get("memory_influence"))
+            new_id=save_revision(case_id,"Face sketch",context.get("description",job["prompt"]),job["prompt"],recovered_seed,recovered_png,
+                context.get("parent_id"),REFERENCE_PROVIDER,st.session_state.get("last_provider_request"),context.get("memory_influence"))
+            st.session_state.pop("unsaved_"+case_id,None)
+            st.session_state["latest_"+case_id]=new_id
+            invalidate_exports(case_id)
+            st.rerun()
+        except Exception as error:
+            st.error(generation_error_message(error))
     resume_job = st.session_state.pop("resume_job_" + case_id, None)
     if resume_job and provider_ready and generation_provider == "fal.ai API":
         try:
@@ -1273,6 +1309,26 @@ with create_tab:
                     st.success("Fields copied below. Review and edit the description before generating.")
         description = st.text_area("Description to generate", height=230, max_chars=5000,
                                    key=description_key, placeholder=EXAMPLES[mode])
+        prepared_references = []
+        reference_authorized = False
+        reference_key = ""
+        reference_generate = False
+        if mode == "Face sketch":
+            prepared_references = render_reference_board(case_id)
+            with st.expander("Paid reference generation", expanded=bool(prepared_references)):
+                st.caption("Separate route: fal FLUX Kontext experimental multi-image. Get Image below remains text-only. References guide appearance; they cannot verify identity or guarantee feature accuracy.")
+                reference_key = st.text_input("fal key for references (private)",type="password",key="reference_api_key")
+                if not reference_key and signed_in_user and signed_in_user["role"] == "admin":
+                    reference_key = os.environ.get("FAL_KEY", "")
+                    if reference_key:
+                        st.caption("Using the owner's configured fal key.")
+                st.caption("A funded fal account is required. Pricing is set by the model provider; review it before enabling. No paid requests occur on upload, preview, or Get Brief.")
+                st.link_button("View reference model pricing", "https://fal.ai/models/fal-ai/flux-pro/kontext/multi")
+                reference_authorized = st.checkbox("I authorize paid reference requests and sending these crops and instructions to fal",value=False,key="reference_authorized_"+case_id)
+                reference_generate = st.button("Generate with references · paid",type="secondary",
+                    disabled=archived or not prepared_references or not reference_key or not reference_authorized or bool(st.session_state.get("unsaved_"+case_id)),key="reference_generate_"+case_id)
+                if not reference_key:
+                    st.caption("Enter your own fal key to enable. Guests cannot use the owner's server key.")
         actions = st.columns(2)
         with actions[0]:
             generate = st.button("Get Image", type="primary", width="stretch",
@@ -1349,7 +1405,12 @@ with create_tab:
                     st.success("Brief saved. Open Written brief on the right. No image quota used.")
                 except (ValueError, sqlite3.Error) as error:
                     st.error(str(error) if isinstance(error, ValueError) else "Could not save this brief.")
-        if generate and provider_ready and not st.session_state.get("unsaved_" + case_id):
+        if reference_generate:
+            generation_provider = REFERENCE_PROVIDER
+            fal_api_key = reference_key
+            provider_ready = bool(reference_key) and reference_authorized
+            force_new = False
+        if (generate or reference_generate) and provider_ready and not st.session_state.get("unsaved_" + case_id):
             clean = description.strip()
             if not clean:
                 st.warning("Enter a description first.")
@@ -1358,6 +1419,17 @@ with create_tab:
             else:
                 request_seed = secrets.randbelow(2147483648) if vary else int(seed)
                 prompt, memory_influence = make_generation_prompt(clean, mode)
+                reference_input_error = None
+                if reference_generate:
+                    try:
+                        prompt, _, reference_plan = prepare_references(prompt, prepared_references)
+                        memory_influence["reference_plan"] = reference_plan
+                        memory_influence["reference_model"] = REFERENCE_MODEL
+                    except ProviderError as error:
+                        reference_input_error = str(error)
+                if reference_input_error:
+                    st.warning(reference_input_error)
+                    st.stop()
                 match_id = find_matching_revision(case_id, mode, prompt, request_seed)
                 if match_id and not force_new:
                     st.session_state["latest_" + case_id] = match_id
@@ -1367,7 +1439,8 @@ with create_tab:
                     st.session_state["request_count"] = st.session_state.get("request_count", 0) + 1
                     with st.spinner("Generating with the selected provider. There may be a queue...", show_time=True):
                         png, actual_seed = generate_with_provider(prompt, request_seed, generation_provider, fal_api_key, case_id,
-                                                                        {"description": clean, "mode": mode, "parent_id": parent_id, "memory_influence": memory_influence})
+                                                                        {"description": clean, "mode": mode, "parent_id": parent_id, "memory_influence": memory_influence},
+                                                                        references=prepared_references if reference_generate else None)
                 except Exception as error:
                     try:
                         record_quota_failure(generation_provider, error)
