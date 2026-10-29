@@ -19,6 +19,7 @@ import streamlit as st
 from gradio_client import Client
 from fal_backend import run_fal, list_pending, ProviderError, PendingJob
 from auth_store import AuthStore, AuthError
+from image_editing import render_image_editor, resume_image_edit, EDIT_MODEL, EDIT_PROVIDER
 from reference_board import render_reference_board
 from reference_backend import run_reference, prepare_references, REFERENCE_PROVIDER, REFERENCE_MODEL
 from PIL import Image, ImageDraw, ImageOps
@@ -886,6 +887,22 @@ def log_out_of_workspace(store):
     st.rerun()
 
 
+def persist_image_edit(base, result):
+    # Set recovery state before the database write so a returned paid output is not discarded.
+    item=dict(image=result["image"],mode=base["mode"],description=base["description"],
+        prompt=result["prompt"],seed=result["seed"],parent_id=base["id"],created=now(),id=uuid.uuid4().hex,
+        provider=result["provider"],request_id=result.get("request_id"),memory_snapshot=result.get("memory_snapshot"))
+    st.session_state["unsaved_"+base["case_id"]]=item
+    try:
+        revision_id=save_revision(base["case_id"],item["mode"],item["description"],item["prompt"],item["seed"],item["image"],
+            base["id"],item["provider"],item["request_id"],item["memory_snapshot"])
+    except (sqlite3.Error,OSError):
+        st.rerun()
+    st.session_state.pop("unsaved_"+base["case_id"],None)
+    st.session_state["latest_"+base["case_id"]]=revision_id
+    invalidate_exports(base["case_id"])
+    st.rerun()
+
 def show_revision(item, key):
     st.image(item["image"], caption=NOTICE, width="stretch")
     st.caption(f"{item['mode']} · Seed {item['seed']} · {item['created']} (UTC)")
@@ -1068,6 +1085,8 @@ with st.sidebar:
                 st.error("Could not save the case. Check available disk space and try again.")
         all_cases = list_cases()
         show_archived = st.checkbox("Show archived cases", value=False, key="show_archived")
+        if st.session_state.pop("clear_case_search_next_run",False):
+            st.session_state["case_search"]=""
         search = st.text_input("Search cases", placeholder="Case name or ID", key="case_search").strip().casefold()
         cases = [case for case in all_cases
                  if (show_archived or not case_is_archived(case["id"]))
@@ -1082,7 +1101,32 @@ with st.sidebar:
                               format_func=lambda value: names[value] + " (" + value[:6] + ")",
                               key="case_select")
 
-st.header(names[case_id])
+heading,rename_action=st.columns([4,1])
+with heading:
+    st.header(names[case_id])
+with rename_action:
+    if st.button("Rename case",key="rename_case_visible_"+case_id,width="stretch"):
+        st.session_state["rename_case_open_"+case_id]=not st.session_state.get("rename_case_open_"+case_id,False)
+if st.session_state.get("rename_case_open_"+case_id):
+    with st.form("visible_rename_"+case_id):
+        new_case_name=st.text_input("New case title",value=names[case_id],max_chars=100,key="visible_case_name_"+case_id)
+        save_name=st.form_submit_button("Save new case name")
+        cancel_name=st.form_submit_button("Cancel rename")
+    if cancel_name:
+        st.session_state["rename_case_open_"+case_id]=False
+        st.rerun()
+    if save_name:
+        try:
+            rename_case(case_id,new_case_name)
+            invalidate_exports(case_id)
+            st.session_state["clear_case_search_next_run"]=True
+            st.session_state["rename_case_open_"+case_id]=False
+            st.session_state["flash_"+case_id]="Case renamed. Saved versions and notes are unchanged."
+            st.rerun()
+        except ValueError as error:
+            st.warning(str(error))
+        except sqlite3.Error:
+            st.error("Could not rename this case. Please try again.")
 archived = case_is_archived(case_id)
 if archived:
     st.info("Archived case. Its saved work remains available. Restore it to add new illustrations.")
@@ -1112,6 +1156,26 @@ if pending_jobs:
     with st.expander("Recover provider requests", expanded=True):
         st.write("Accepted requests can be resumed without a new generation submission.")
         for index, job in enumerate(pending_jobs):
+            if job.get("model") == EDIT_MODEL:
+                st.caption("Image edit: "+job.get("request_id","submission outcome unknown")+" / "+job["state"])
+                edit_resume_key=st.text_input("fal key to resume image edit",type="password",key="edit_resume_key_"+str(index))
+                if not edit_resume_key and signed_in_user and signed_in_user["role"]=="admin":
+                    edit_resume_key=os.environ.get("FAL_KEY","")
+                edit_resume_permission=st.checkbox("I authorize retrieval of this image edit",key="edit_resume_auth_"+str(index))
+                if job["state"]=="pending" and st.button("Resume image edit "+str(index+1),disabled=not edit_resume_key or not edit_resume_permission,key="edit_resume_"+str(index)):
+                    source_id=(job.get("context") or {}).get("parent_id")
+                    source=get_revision(case_id,source_id) if source_id else None
+                    if source:
+                        try:
+                            result=resume_image_edit(job,source,edit_resume_key,DATA_DIR,case_id,authorized=True)
+                            persist_image_edit(source,result)
+                        except (ProviderError,ValueError,OSError):
+                            st.error("Could not retrieve the edited image. Check the provider history before resubmitting.")
+                    else:
+                        st.error("The source version for this edit is missing from this case.")
+                elif job["state"]!="pending":
+                    st.warning("Submission outcome is uncertain. Check fal history; no automatic resubmission will occur.")
+                continue
             if job.get("model") == REFERENCE_MODEL:
                 st.caption("Reference request: " + job.get("request_id", "submission outcome unknown") + " / " + job["state"])
                 resume_key = st.text_input("fal key to resume references",type="password",key="ref_resume_key_"+str(index))
@@ -1487,6 +1551,12 @@ with create_tab:
         if not latest_id and revisions:
             latest_id = revisions[0]["id"]
         latest = unsaved or (get_revision(case_id, latest_id) if latest_id else None)
+        if revisions and not unsaved:
+            view_ids=[row["id"] for row in revisions]
+            view_names={row["id"]:"Version "+str(len(revisions)-index)+" · "+row["mode"] for index,row in enumerate(revisions)}
+            view_id=st.selectbox("Image to view or edit",view_ids,index=view_ids.index(latest_id) if latest_id in view_ids else 0,
+                format_func=lambda value:view_names[value],key="image_view_"+case_id+"_"+str(latest_id))
+            latest=get_revision(case_id,view_id)
         if latest:
             if unsaved:
                 st.warning("This image has not saved to the case. Download it below or retry saving without generating again.")
@@ -1510,6 +1580,14 @@ with create_tab:
                 st.caption("Viewing saved version " + str(latest_rows[latest["id"]]) + " / " +
                            get_review_status(latest["id"]))
             show_revision(latest, "latest_" + case_id)
+            if not unsaved and latest.get("parent_id") and st.button("View previous version",key="previous_image_"+latest["id"]):
+                st.session_state["latest_"+case_id]=latest["parent_id"]
+                st.rerun()
+            if not unsaved and not archived:
+                edit_owner_key=os.environ.get("FAL_KEY","") if signed_in_user and signed_in_user["role"]=="admin" else ""
+                render_image_editor(latest,data_dir=DATA_DIR,case_id=case_id,owner_key=edit_owner_key,on_save=persist_image_edit)
+            elif unsaved:
+                st.caption("Save this result before editing it.")
             if not unsaved and st.button("Continue refining this image",key="continue_"+latest["id"]):
                 st.session_state["refine_base_"+case_id]=latest["id"]
                 st.session_state["flash_"+case_id]="Image selected for correction. Open Review & Compare, then Correct an image."
@@ -1667,6 +1745,10 @@ with refine_tab:
         reference_col, feedback_col = st.columns(2, gap="large")
         with reference_col:
             show_revision(base, "refine_" + base_id)
+            if not archived and st.button("Open this version in image editor",key="open_image_edit_"+base_id):
+                st.session_state["latest_"+case_id]=base_id
+                st.session_state["flash_"+case_id]="Image selected. Open Workspace, then Edit this generated image below the result."
+                st.rerun()
             account_choices = list_accounts(case_id, base["mode"])
             account_lookup = {record["id"]: record for record in account_choices}
             reference_id = st.selectbox(

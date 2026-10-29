@@ -108,7 +108,7 @@ def run_fal(prompt, seed, key, data_dir, case_id, *, context=None, max_wait=240,
     downloader = downloader or download_image
     clock = clock or time.monotonic
     sleep = sleep or time.sleep
-    if model not in (MODEL, "fal-ai/flux-pro/kontext/multi"):
+    if model not in (MODEL, "fal-ai/flux-pro/kontext/multi", "fal-ai/flux-pro/kontext"):
         raise ProviderError("Unsupported generation model.")
     path = job_path(data_dir, case_id, prompt, seed, model)
     job = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
